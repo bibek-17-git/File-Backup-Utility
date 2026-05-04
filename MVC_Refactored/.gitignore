@@ -1,1 +1,42 @@
+# Build artifacts
+*.o
+*.obj
+*.exe
+*.out
+smart_backup_mvc
+smart_backup_mvc.exe
 
+# Runtime files
+backup_config.txt
+backup_log.txt
+*.log
+Backup_*/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.bak
+*.cache
+*.orig
+
+# Compiled libraries
+*.dll
+*.so
+*.dylib
+
+# Archives
+*.zip
+*.tar
+*.tar.gz
+*.rar
+*.7z
