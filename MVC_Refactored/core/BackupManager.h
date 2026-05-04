@@ -1,4 +1,5 @@
 #pragma once
+#include <direct.h>
 #include "../strategies/SimpleCopyStrategy.h"
 #include <vector>
 #include <string>
