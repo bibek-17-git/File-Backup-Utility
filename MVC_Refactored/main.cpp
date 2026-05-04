@@ -2,9 +2,35 @@
 #include "model/BackupModel.cpp"
 #include "model/SettingsModel.cpp"
 #include "view/MainView.cpp"
-#include "view/SettingsDialog.h"
+#include "controller/BackupController.cpp"
+#include "controller/SettingsController.cpp"
 #include "strategies/SimpleCopyStrategy.h"
 #include "core/BackupManager.h"
+
+// Backup Observer class
+class BackupObserver : public IBackupObserver {
+public:
+    MainView* view;
+    IBackupModel* model;
+    
+    void onProgress(int current, int total, const std::string& filename) override {
+        model->updateProgress(current, total, filename);
+        view->updateStatus("Backing up: " + filename, (double)current / total);
+    }
+    
+    void onComplete(int success, int total) override {
+        model->setBackupRunning(false);
+        view->setBackupButtonEnabled(true);
+        view->updateStatus("Complete: " + std::to_string(success) + "/" + std::to_string(total), 1.0);
+        view->showNotification("Backup Complete", std::to_string(success) + " files backed up");
+    }
+    
+    void onError(const std::string& message) override {
+        model->setBackupRunning(false);
+        view->setBackupButtonEnabled(true);
+        view->showError(message);
+    }
+};
 
 int main(int argc, char* argv[]) {
     gtk_init(&argc, &argv);
@@ -14,7 +40,7 @@ int main(int argc, char* argv[]) {
     SettingsModel settingsModel;
     
     // Set default settings
-    settingsModel.setDestination("C:\\Backups");
+    settingsModel.setDestination(".");
     settingsModel.setAutoBackup(false);
     settingsModel.setInterval(300);
     settingsModel.setIncludeSubfolders(true);
@@ -27,7 +53,7 @@ int main(int argc, char* argv[]) {
     SimpleCopyStrategy copyStrategy;
     BackupManager backupManager(&copyStrategy);
     
-    // Connect Model to View
+    // Connect Model to View (Observer)
     backupModel.addObserver([&mainView, &backupModel]() {
         mainView.updateFileList(backupModel.getItems());
         if (!backupModel.isBackupRunning() && backupModel.getItemCount() > 0) {
@@ -35,12 +61,12 @@ int main(int argc, char* argv[]) {
         }
     });
     
-    // Setup Controller logic directly in main (simplified)
-    mainView.onFileSelected([&backupModel, &settingsModel](const std::vector<std::string>& paths, bool recursive) {
+    // Setup View Callbacks
+    mainView.onFileSelected([&backupModel](const std::vector<std::string>& paths, bool recursive) {
         for (const auto& path : paths) {
             backupModel.addItem(path);
         }
-        mainView.updateStatus(std::to_string(backupModel.getItemCount()) + " items added", 0.0);
+        (void)recursive; // unused parameter
     });
     
     mainView.onRemoveSelected([&backupModel, &mainView]() {
@@ -48,6 +74,8 @@ int main(int argc, char* argv[]) {
         if (!selected.empty()) {
             backupModel.removeItem(selected);
             mainView.updateStatus("Removed: " + selected, 0.0);
+        } else {
+            mainView.showNotification("Notice", "Please select an item to remove");
         }
     });
     
@@ -55,36 +83,6 @@ int main(int argc, char* argv[]) {
         backupModel.clearItems();
         mainView.updateStatus("All items cleared", 0.0);
     });
-    
-    // Setup backup observer
-    class BackupObserver : public IBackupObserver {
-    public:
-        MainView* view;
-        IBackupModel* model;
-        
-        void onProgress(int current, int total, const std::string& filename) override {
-            model->updateProgress(current, total, filename);
-            view->updateStatus("Backing up: " + filename, (double)current / total);
-        }
-        
-        void onComplete(int success, int total) override {
-            model->setBackupRunning(false);
-            view->setBackupButtonEnabled(true);
-            view->updateStatus("Complete: " + std::to_string(success) + "/" + std::to_string(total), 1.0);
-            view->showNotification("Backup Complete", std::to_string(success) + " files backed up");
-        }
-        
-        void onError(const std::string& message) override {
-            model->setBackupRunning(false);
-            view->setBackupButtonEnabled(true);
-            view->showError(message);
-        }
-    };
-    
-    BackupObserver observer;
-    observer.view = &mainView;
-    observer.model = &backupModel;
-    backupManager.setObserver(&observer);
     
     mainView.onStartBackup([&backupModel, &backupManager, &settingsModel, &mainView]() {
         if (backupModel.isBackupRunning()) {
@@ -101,9 +99,26 @@ int main(int argc, char* argv[]) {
     });
     
     mainView.onOpenSettings([&settingsModel, &mainView]() {
-        auto s = settingsModel.getSettings();
-        SettingsDialog::show(GTK_WINDOW(gtk_widget_get_toplevel(GTK_WIDGET(mainView.show() == 0 ? nullptr : nullptr))),
-            s.destination, s.autoBackup, s.interval, s.maxCopies,
-            s.includeSubfolders, s.includeHidden,
-            [&settingsModel](const std::string& d, bool a, int i, int m, bool sf, bool h) {
-                settingsModel.setDestination(d);
+        BackupSettings s = settingsModel.getSettings();
+        std::string msg = "Current Settings:\nDestination: " + s.destination +
+                          "\nAuto Backup: " + (s.autoBackup ? "Yes" : "No") +
+                          "\nInterval: " + std::to_string(s.interval) + " seconds";
+        mainView.showNotification("Settings", msg);
+    });
+    
+    mainView.onViewLog([&mainView]() {
+        mainView.showNotification("Log", "Backup logs are saved in the backup directory");
+    });
+    
+    // Setup Backup Observer
+    BackupObserver observer;
+    observer.view = &mainView;
+    observer.model = &backupModel;
+    backupManager.setObserver(&observer);
+    
+    // Show the application
+    mainView.show();
+    
+    gtk_main();
+    return 0;
+}
