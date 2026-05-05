@@ -5,6 +5,9 @@
 
 #ifdef _WIN32
     #define stat _stat
+    #include <windows.h>
+    #include <commdlg.h>
+    #include <shlobj.h>
 #endif
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -28,6 +31,38 @@ std::string MainView::lastModified(const std::string& path) {
 
 std::vector<std::string> MainView::showFileChooserDialog() {
     std::vector<std::string> paths;
+
+#ifdef _WIN32
+    OPENFILENAMEW ofn;
+    wchar_t szFile[32768] = {0};
+    ZeroMemory(&ofn, sizeof(ofn));
+    ofn.lStructSize  = sizeof(ofn);
+    ofn.hwndOwner    = NULL;
+    ofn.lpstrFile    = szFile;
+    ofn.nMaxFile     = sizeof(szFile) / sizeof(wchar_t);
+    ofn.lpstrFilter  = L"All Files\0*.*\0";
+    ofn.nFilterIndex = 1;
+    ofn.Flags        = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST |
+                       OFN_ALLOWMULTISELECT | OFN_EXPLORER;
+
+    if (GetOpenFileNameW(&ofn)) {
+        wchar_t* p = szFile;
+        std::wstring dir(p);
+        p += dir.size() + 1;
+        if (*p == 0) {
+            // single file selected
+            paths.push_back(std::string(dir.begin(), dir.end()));
+        } else {
+            // multiple files selected — first token is the folder
+            while (*p) {
+                std::wstring file(p);
+                std::wstring full = dir + L"\\" + file;
+                paths.push_back(std::string(full.begin(), full.end()));
+                p += file.size() + 1;
+            }
+        }
+    }
+#else
     GtkWidget* dialog = gtk_file_chooser_dialog_new(
         "Select Files", GTK_WINDOW(m_window),
         GTK_FILE_CHOOSER_ACTION_OPEN,
@@ -44,11 +79,26 @@ std::vector<std::string> MainView::showFileChooserDialog() {
         g_slist_free(files);
     }
     gtk_widget_destroy(dialog);
+#endif
     return paths;
 }
 
 std::vector<std::string> MainView::showFolderDialog() {
     std::vector<std::string> paths;
+
+#ifdef _WIN32
+    BROWSEINFOW bi = {0};
+    bi.ulFlags   = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE;
+    bi.lpszTitle = L"Select Backup Folder";
+    LPITEMIDLIST pidl = SHBrowseForFolderW(&bi);
+    if (pidl) {
+        wchar_t path[MAX_PATH];
+        if (SHGetPathFromIDListW(pidl, path)) {
+            paths.push_back(std::string(path, path + wcslen(path)));
+        }
+        CoTaskMemFree(pidl);
+    }
+#else
     GtkWidget* dialog = gtk_file_chooser_dialog_new(
         "Select Folder", GTK_WINDOW(m_window),
         GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER,
@@ -60,6 +110,7 @@ std::vector<std::string> MainView::showFolderDialog() {
         if (folder) { paths.push_back(folder); g_free(folder); }
     }
     gtk_widget_destroy(dialog);
+#endif
     return paths;
 }
 
@@ -271,4 +322,3 @@ void MainView::onClearAll(ClearAllCallback cb)           { m_onClearAll       = 
 void MainView::onStartBackup(StartBackupCallback cb)     { m_onStartBackup    = cb; }
 void MainView::onOpenSettings(OpenSettingsCallback cb)   { m_onOpenSettings   = cb; }
 void MainView::onViewLog(ViewLogCallback cb)             { m_onViewLog        = cb; }
-
