@@ -25,13 +25,8 @@ OBJS := $(SRCS:.cpp=.o)
 # Header files (dependencies)
 HEADERS := model/IBackupModel.h \
            model/ISettingsModel.h \
-           model/BackupModel.h \
-           model/SettingsModel.h \
            view/IMainView.h \
-           view/MainView.h \
            view/SettingsDialog.h \
-           controller/BackupController.h \
-           controller/SettingsController.h \
            strategies/SimpleCopyStrategy.h \
            core/BackupManager.h
 
@@ -59,7 +54,7 @@ $(TARGET): $(OBJS)
 # Clean build artifacts
 clean:
 	@echo "🧹 Cleaning..."
-	rm -f $(OBJS) $(TARGET)
+	rm -f $(OBJS) $(TARGET) $(TARGET).exe
 	@echo "✅ Clean complete"
 
 # Run the program
@@ -93,7 +88,7 @@ dirs:
 # For Windows (MSYS2/MinGW)
 ifeq ($(OS),Windows_NT)
     CXXFLAGS += -DWIN32
-    LDFLAGS  += -static-libgcc -static-libstdc++
+    LDFLAGS  += -lole32 -lshell32 -lcomdlg32
 endif
 
 # For Linux
